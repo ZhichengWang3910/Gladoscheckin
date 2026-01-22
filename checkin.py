@@ -1,5 +1,4 @@
 import requests
-import json
 import os
 import time
 
@@ -16,17 +15,32 @@ def send_wechat(token, title, msg):
     print("PushPlus:", r.text)
 
 
-if __name__ == '__main__':
+def build_urls(domain: str):
+    base = f"https://{domain}"
+    return {
+        "checkin": f"{base}/api/user/checkin",
+        "status":  f"{base}/api/user/status",
+        "referer": f"{base}/console/checkin",
+        "origin":  base
+    }
 
-    sckey = os.environ.get("SENDKEY", "")
+
+if __name__ == "__main__":
+
+    # ========= 基础配置（全部可通过 Env 覆盖） =========
+    domain = os.environ.get("GLADOS_DOMAIN", "glados.cloud").strip()
     cookies = os.environ.get("COOKIES", "").split("&")
+    sendkey = os.environ.get("SENDKEY", "")
 
-    if not cookies or cookies[0] == "":
-        print("未找到 cookies")
+    if not domain:
+        print("GLADOS_DOMAIN 为空")
         exit(0)
 
-    check_in_url = "https://glados.space/api/user/checkin"
-    status_url = "https://glados.space/api/user/status"
+    if not cookies or cookies[0] == "":
+        print("未找到 COOKIES")
+        exit(0)
+
+    urls = build_urls(domain)
 
     headers = {
         "User-Agent": (
@@ -34,37 +48,30 @@ if __name__ == '__main__':
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/121.0.0.0 Safari/537.36"
         ),
-        "Referer": "https://glados.space/console/checkin",
-        "Origin": "https://glados.space",
+        "Referer": urls["referer"],
+        "Origin": urls["origin"],
         "Content-Type": "application/json;charset=UTF-8",
     }
 
     payload = {"token": "glados.one"}
 
-    success, fail, repeat = 0, 0, 0
-    context_lines = []
+    success, repeat, fail = 0, 0, 0
+    summary = []
 
     for idx, cookie in enumerate(cookies, 1):
-        print(f"\n==== Account {idx} ====")
+        print(f"\n==== Account {idx} ({domain}) ====")
 
         session = requests.Session()
         session.headers.update(headers)
         session.headers.update({"Cookie": cookie})
 
         try:
-            # 签到
-            r = session.post(check_in_url, json=payload, timeout=15)
-            print("Checkin response:", r.text)
+            r = session.post(urls["checkin"], json=payload, timeout=15)
+            print("Checkin:", r.text)
 
-            try:
-                result = r.json()
-            except Exception:
-                fail += 1
-                context_lines.append("签到返回非 JSON，可能被风控")
-                continue
-
-            msg = result.get("message", "")
-            points = result.get("points", 0)
+            data = r.json()
+            msg = data.get("message", "")
+            points = data.get("points", 0)
 
             if "Checkin! Got" in msg:
                 success += 1
@@ -74,35 +81,33 @@ if __name__ == '__main__':
                 status_msg = "重复签到"
             else:
                 fail += 1
-                status_msg = f"签到失败: {msg}"
-                context_lines.append(status_msg)
-                continue  # 失败直接跳过 status 请求
+                summary.append(f"签到失败: {msg}")
+                continue
 
-            # 查询状态
-            r2 = session.get(status_url, timeout=15)
-            data = r2.json().get("data", {})
+            r2 = session.get(urls["status"], timeout=15)
+            info = r2.json().get("data", {})
 
-            email = data.get("email", "unknown")
-            left_days = data.get("leftDays", "NA")
+            email = info.get("email", "unknown")
+            days = info.get("leftDays", "NA")
 
-            context_lines.append(
-                f"{email} | {status_msg} | 剩余 {left_days} 天"
+            summary.append(
+                f"{email} | {status_msg} | 剩余 {days} 天"
             )
 
-            time.sleep(2)  # 降低风控风险
+            time.sleep(2)
 
         except Exception as e:
             fail += 1
-            context_lines.append(f"异常: {str(e)}")
+            summary.append(f"异常: {str(e)}")
 
-    title = f"GLaDOS: 成功{success} 重复{repeat} 失败{fail}"
-    context = "<br>".join(context_lines)
+    title = f"GLaDOS ({domain}) 成功{success} 重复{repeat} 失败{fail}"
+    content = "<br>".join(summary)
 
     print("\n=== Summary ===")
     print(title)
-    print(context)
+    print(content)
 
-    if sckey:
-        send_wechat(sckey, title, context)
+    if sendkey:
+        send_wechat(sendkey, title, content)
     else:
         print("未设置 SENDKEY，不推送")
