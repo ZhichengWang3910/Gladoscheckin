@@ -5,7 +5,6 @@ import logging
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, asdict
-from pypushdeer import PushDeer
 from logging_config import init_logger
 
 
@@ -94,7 +93,7 @@ def log_method(func):
 class Config:
     """应用配置"""
 
-    ENV_PUSH_KEY = "PUSHDEER_SENDKEY"
+    ENV_PUSH_KEY = "SENDKEY"
     ENV_COOKIES = "GLADOS_COOKIES"
     ENV_EXCHANGE_PLAN = "GLADOS_EXCHANGE_PLAN"
     ENV_VERBOSE = "GLADOS_VERBOSE"
@@ -402,16 +401,25 @@ class PushService:
         self.config = config
 
     def send(self, title: str, content: str) -> bool:
-        """发送推送"""
+        """发送推送（Server酱 / ServerChan 3代）"""
         if not self.config.push_key:
             logger.info(f"{LogEmoji.WARNING} 未设置推送密钥，跳过推送通知。")
             return False
 
         try:
-            pushdeer = PushDeer(pushkey=self.config.push_key)
-            pushdeer.send_text(title, desp=content)
-            logger.info(f"{LogEmoji.SUCCESS} 推送通知发送成功。")
-            return True
+            url = f"https://sctapi.ftqq.com/{self.config.push_key}.send"
+            resp = requests.post(url, data={"title": title, "desp": content}, timeout=30)
+            if resp.ok:
+                result = resp.json()
+                if result.get("code") == 0:
+                    logger.info(f"{LogEmoji.SUCCESS} 推送通知发送成功。")
+                    return True
+                else:
+                    logger.error(f"{LogEmoji.ERROR} 推送服务器返回错误: {result.get('message')}")
+                    return False
+            else:
+                logger.error(f"{LogEmoji.ERROR} 推送请求失败，HTTP {resp.status_code}")
+                return False
         except Exception as e:
             logger.error(f"{LogEmoji.ERROR} 发送推送通知失败: {e}")
             return False

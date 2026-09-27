@@ -46,7 +46,8 @@
 
 4. 手机推送（非必须）
 
-- 添加1个`repository secret`，命名为`PUSHDEER_SENDKEY`，其值对应 PushDeer key: ([获取地址](https://www.pushdeer.com/product.html))。
+- 添加1个`repository secret`，命名为`SENDKEY`，其值对应微信推送 Key。
+- 推荐使用 Server酱（ServerChan 3代）: ([获取地址](https://sct.ftqq.com))，注册后即可获得 `SENDKEY`。
 
 ### **star**自己的仓库
 

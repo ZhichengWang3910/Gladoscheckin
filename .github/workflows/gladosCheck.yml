@@ -41,14 +41,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install requests
-        pip install pypushdeer
 
     # 执行 签到脚本
     - name: Running checkin
       run: |
         python checkin.py
       env:
-        PUSHDEER_SENDKEY: ${{ secrets.PUSHDEER_SENDKEY }}
+        SENDKEY: ${{ secrets.SENDKEY }}
         GLADOS_COOKIES: ${{ secrets.GLADOS_COOKIES }}
         GLADOS_EXCHANGE_PLAN: ${{ secrets.GLADOS_EXCHANGE_PLAN }}
         GLADOS_VERBOSE: ${{ secrets.GLADOS_VERBOSE }}
