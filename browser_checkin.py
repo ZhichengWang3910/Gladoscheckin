@@ -140,6 +140,7 @@ def main() -> int:
         # GitHub runners provide stable Google Chrome; using it avoids the
         # automation fingerprint that GLaDOS classifies as the Bot device.
         launch_kwargs = {
+            "channel": "chrome",
             "headless": False,
             "args": [
                 "--disable-blink-features=AutomationControlled",
