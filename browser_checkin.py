@@ -148,9 +148,6 @@ def main() -> int:
                 "--disable-dev-shm-usage",
             ],
         }
-        executable = "/usr/bin/google-chrome"
-        if os.path.exists(executable):
-            launch_kwargs["executable_path"] = executable
         browser = playwright.chromium.launch(**launch_kwargs)
         context = browser.new_context(
             user_agent=MAC_UA,
