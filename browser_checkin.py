@@ -19,6 +19,7 @@ DOMAINS = ["glados.rocks", "glados.cloud"]
 COOKIE_ENV = "GLADOS_COOKIES"
 SENDKEY_ENV = "SENDKEY"
 RETRIES = 3
+NAV_RETRIES = 3
 
 MAC_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -58,12 +59,25 @@ def add_cookies(context, domain: str, raw: str) -> None:
 
 
 def checkin_on_domain(page, domain: str) -> Dict:
-    page.goto(
-        f"https://{domain}/console/checkin",
-        wait_until="domcontentloaded",
-        timeout=60000,
-    )
-    page.wait_for_timeout(5000)
+    nav_error = None
+    for attempt in range(1, NAV_RETRIES + 1):
+        try:
+            page.goto(
+                f"https://{domain}/console/checkin",
+                wait_until="commit",
+                timeout=60000,
+            )
+            page.wait_for_timeout(5000)
+            if page.evaluate("document.body.innerText").strip():
+                nav_error = None
+                break
+        except Exception as exc:
+            nav_error = exc
+            log(f"{domain}: navigation attempt {attempt} failed: {exc}")
+            if attempt < NAV_RETRIES:
+                time.sleep(5 * attempt)
+    if nav_error is not None:
+        return {"ok": False, "message": f"{domain}: page load failed after {NAV_RETRIES} retries: {nav_error}"}
     if page.url.rstrip("/") == f"https://{domain}":
         return {"ok": False, "message": f"{domain}: login cookie rejected"}
 
