@@ -58,6 +58,42 @@ def add_cookies(context, domain: str, raw: str) -> None:
     context.add_cookies(cookies)
 
 
+def ui_checkin(page, domain: str) -> Dict:
+    """Click the page button so the page can solve Turnstile and submit proof."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    button = page.locator("button.ckb, button.checkin-cute-btn").first
+    if button.count() == 0:
+        return {"http_status": 0, "data": {"code": -3, "message": "check-in button not found"}}
+
+    last = None
+    for attempt in range(1, RETRIES + 1):
+        try:
+            with page.expect_response(
+                lambda response: "/api/user/checkin" in response.url,
+                timeout=120000,
+            ) as response_info:
+                button.click(force=True, timeout=30000)
+            response = response_info.value
+            text = response.text()
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                data = {"raw": text}
+            last = {"http_status": response.status, "data": data}
+            log(f"{domain}: UI attempt {attempt}, HTTP {response.status}, code {data.get('code')}")
+            return last
+        except PlaywrightTimeoutError as exc:
+            last = {"http_status": 0, "data": {"code": -1, "message": str(exc)}}
+            log(f"{domain}: UI attempt {attempt} timed out; retrying Turnstile")
+            if attempt < RETRIES:
+                page.reload(wait_until="commit", timeout=60000)
+                page.wait_for_timeout(5000)
+                button = page.locator("button.ckb, button.checkin-cute-btn").first
+                time.sleep(3 * attempt)
+    return last or {"http_status": 0, "data": {"code": -1, "message": "UI check-in had no response"}}
+
+
 def checkin_on_domain(page, domain: str) -> Dict:
     nav_error = None
     for attempt in range(1, NAV_RETRIES + 1):
@@ -83,32 +119,11 @@ def checkin_on_domain(page, domain: str) -> Dict:
 
     last = None
     for attempt in range(1, RETRIES + 1):
-        response = page.evaluate(
-            """async (domain) => {
-                try {
-                    const r = await fetch('/api/user/checkin', {
-                        method: 'POST',
-                        credentials: 'include',
-                        headers: {
-                            'Accept': 'application/json, text/plain, */*',
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({token: domain})
-                    });
-                    const text = await r.text();
-                    let data;
-                    try { data = JSON.parse(text); } catch (_) { data = {raw: text}; }
-                    return {http_status: r.status, data};
-                } catch (e) {
-                    return {http_status: 0, error: String(e)};
-                }
-            }""",
-            domain,
-        )
+        response = ui_checkin(page, domain)
         last = response
         data = response.get("data") or {}
         code = data.get("code")
-        log(f"{domain}: attempt {attempt}, HTTP {response.get('http_status')}, code {code}")
+        log(f"{domain}: UI check-in result, HTTP {response.get('http_status')}, code {code}")
         if code == 0:
             return {"ok": True, "already": False, "message": f"{domain}: check-in succeeded (+{data.get('points', '?')} points)"}
         if code == 1:
